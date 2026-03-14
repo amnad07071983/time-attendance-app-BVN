@@ -52,7 +52,7 @@ logs4_ws = sheet.worksheet("Logs4")
 logs5_ws = sheet.worksheet("Logs5")
 
 # ================== DATA CACHE ==================
-@st.cache_data(ttl=60) # ลด TTL เพื่อให้ข้อมูลอัปเดตบ่อยขึ้นแต่ไม่โหลด API หนักเกินไป
+@st.cache_data(ttl=60)
 def load_settings():
     return settings_ws.get_all_values()
 
@@ -113,7 +113,6 @@ def decode_qr(img):
     data, _, _ = detector.detectAndDecode(img)
     return data.strip() if data else None
 
-# ปรับปรุง: รองรับการบันทึกพร้อมกัน 500 คนด้วย Exponential Backoff + Jitter
 def safe_append(ws, row, retry=10):
     for i in range(retry):
         try:
@@ -122,7 +121,6 @@ def safe_append(ws, row, retry=10):
         except Exception as e:
             if i == retry - 1:
                 return False
-            # รอแบบสุ่มเพื่อเลี่ยงการชนกัน (Wait 1-3, 2-4, 4-6... seconds)
             wait_time = (2 ** i) + random.uniform(0.1, 1.0)
             time.sleep(wait_time)
     return False
@@ -157,7 +155,6 @@ if action == "ลางาน":
     st.session_state.leave_start = c1.date_input("เริ่มลา", st.session_state.leave_start)
     st.session_state.leave_end = c2.date_input("สิ้นสุด", st.session_state.leave_end)
 
-# ปรับปรุง: ป้องกัน KeyError จากการดึงพิกัด (GPS)
 lat, lon = None, None
 if action != "ลางาน":
     loc = get_geolocation()
@@ -168,13 +165,30 @@ if action != "ลางาน":
         st.warning("⚠️ กรุณาเปิด GPS และรอนะบบดึงตำแหน่ง (หากมีป๊อปอัพให้กด Allow หรืออนุญาต)")
         st.stop()
 
+# --- ส่วนของการสแกน QR Code (เพิ่มการเลือกไฟล์) ---
 if not st.session_state.qr_value:
-    img = st.camera_input("📷 สแกน QR CODE จากบัตรพนักงาน")
-    if img:
-        qr = decode_qr(cv2.imdecode(np.frombuffer(img.getvalue(), np.uint8), cv2.IMREAD_COLOR))
-        if qr:
-            st.session_state.qr_value = qr
+    tab1, tab2 = st.tabs(["📷 ถ่ายภาพสด", "📁 เลือกรูปภาพจากเครื่อง"])
+    
+    with tab1:
+        camera_img = st.camera_input("สแกน QR CODE จากบัตรพนักงาน")
+    
+    with tab2:
+        uploaded_img = st.file_uploader("เลือกไฟล์รูปภาพ QR Code", type=['png', 'jpg', 'jpeg'])
+    
+    # เลือกแหล่งที่มาของภาพ
+    target_img = camera_img if camera_img else uploaded_img
+    
+    if target_img:
+        # ถอดรหัสภาพ
+        file_bytes = np.frombuffer(target_img.getvalue(), np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        qr_data = decode_qr(img)
+        
+        if qr_data:
+            st.session_state.qr_value = qr_data
             st.rerun()
+        else:
+            st.error("❌ ไม่สามารถอ่าน QR Code ได้ กรุณาลองใหม่หรือใช้รูปที่ชัดเจนกว่านี้")
 else:
     emp = st.session_state.qr_value
     st.success(f"👤 {emp}")
@@ -182,6 +196,9 @@ else:
     emp_set = get_employee_setting(emp)
     if not emp_set:
         st.error("ไม่พบข้อมูลพนักงานในระบบ")
+        if st.button("🔄 สแกนใหม่"):
+            st.session_state.qr_value = None
+            st.rerun()
         st.stop()
 
     if not st.session_state.saved and st.button("✅ ยืนยันบันทึกข้อมูล"):
@@ -208,7 +225,6 @@ else:
 
             if safe_append(log_ws, row):
                 st.session_state.saved = True
-                # ปรับปรุง: ไม่ใช้ st.cache_data.clear() พร่ำเพรื่อเพื่อลดภาระ API ตอนคนใช้เยอะ
                 st.balloons()
                 st.success("บันทึกข้อมูลเรียบร้อยแล้ว!")
                 time.sleep(1)
