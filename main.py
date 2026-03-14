@@ -167,7 +167,7 @@ if action != "ลางาน":
 
 # --- ส่วนของการสแกน QR Code (เพิ่มการเลือกไฟล์) ---
 if not st.session_state.qr_value:
-    tab1, tab2 = st.tabs(["📷 ถ่ายภาพสด", "📁 เลือกรูปภาพจากเครื่อง"])
+    tab1, tab2 = st.tabs(["📷 สแกนจากบัตร", "📁 เลือกรูปภาพจากเครื่อง"])
     
     with tab1:
         camera_img = st.camera_input("สแกน QR CODE จากบัตรพนักงาน")
