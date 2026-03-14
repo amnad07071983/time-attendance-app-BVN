@@ -1,0 +1,8 @@
+streamlit
+gspread
+oauth2client
+pandas
+xlsxwriter
+opencv-python-headless
+streamlit-js-eval
+numpy
